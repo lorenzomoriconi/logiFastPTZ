@@ -29,26 +29,54 @@ A tiny Windows .NET app for controlling Logitech motorized webcams connected via
 
 ## Installation
 
-1. Clone this repository:
+1. Clone this repository together with its PTZ library submodule:
    ```bash
-   git clone https://github.com/lorenzomoriconi/logiFastPTZ.git
+   git clone --recurse-submodules https://github.com/lorenzomoriconi/logiFastPTZ.git
    cd logiFastPTZ
    ```
 
-2. Make sure the PTZ library dependency exists at:
+2. If you already cloned the repository without submodules, initialize the PTZ library now:
+   ```bash
+   git submodule update --init --recursive
+   ```
+
+   The command must create this project inside the repository root:
    ```text
-   ../Logitech-BCC950-PTZ-Lib/PTZDevice.csproj
+   Logitech-BCC950-PTZ-Lib/PTZDevice.csproj
    ```
 
 3. Build the application:
    ```bash
-   dotnet build
+   dotnet build LogiFastPTZ.sln -c Release
    ```
 
 4. Run the application:
    ```bash
    dotnet run --project LogiFastPTZ
    ```
+
+5. To produce a self-contained 64-bit Windows build:
+   ```powershell
+   dotnet publish .\LogiFastPTZ\LogiFastPTZ.csproj `
+     -c Release `
+     -r win-x64 `
+     --self-contained true
+   ```
+
+   The executable is written to:
+   ```text
+   LogiFastPTZ\bin\Release\net8.0-windows\win-x64\publish\LogiFastPTZ.exe
+   ```
+
+### Missing `PTZDevice.csproj` or `PTZ` namespace
+
+If the build reports that `..\Logitech-BCC950-PTZ-Lib\PTZDevice.csproj` does not exist, the Git submodule was not downloaded. From the repository root, run:
+
+```bash
+git submodule update --init --recursive
+```
+
+Then repeat the build or publish command. Do not clone the library one directory above this repository: the solution expects it in the `Logitech-BCC950-PTZ-Lib` directory at the repository root.
 
 ## Usage
 
