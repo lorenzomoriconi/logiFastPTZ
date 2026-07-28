@@ -4,20 +4,30 @@ public sealed class CameraController
 {
     private const string DefaultDeviceName = "BCC950 ConferenceCam";
     private const int DefaultMoveStep = 25;
-    private const int DefaultZoomStep = 2;
-    private const int DefaultZoomMax = 120;
+    private const int EffectiveZoomMax = 120;
 
     private PTZDevice? camera;
 
-    public string DeviceName { get; set; } = DefaultDeviceName;
-
-    public int MoveStep { get; set; } = DefaultMoveStep;
-
-    public int ZoomStep { get; set; } = DefaultZoomStep;
+    public string DeviceName { get; } = DefaultDeviceName;
 
     public string StatusMessage { get; private set; } = "Not connected";
 
-    public int? CurrentZoom => camera?.GetCurrentZoom();
+    public int? CurrentZoom
+    {
+        get
+        {
+            try
+            {
+                return IsConnected && camera is not null
+                    ? Math.Min(camera.GetCurrentZoom(), GetMaximumZoom())
+                    : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
 
     public bool IsConnected => camera?.IsConnected() == true;
 
@@ -27,6 +37,12 @@ public sealed class CameraController
         {
             camera = PTZDevice.GetDevice(DeviceName, PTZType.Relative);
             StatusMessage = "Connected";
+
+            if (camera.GetCurrentZoom() > GetMaximumZoom())
+            {
+                SetZoomCore(GetMaximumZoom());
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -42,13 +58,13 @@ public sealed class CameraController
         return IsConnected || Connect();
     }
 
-    public bool TiltUp() => Move(0, MoveStep);
+    public bool TiltUp() => Move(0, DefaultMoveStep);
 
-    public bool TiltDown() => Move(0, -MoveStep);
+    public bool TiltDown() => Move(0, -DefaultMoveStep);
 
-    public bool PanLeft() => Move(MoveStep, 0);
+    public bool PanLeft() => Move(DefaultMoveStep, 0);
 
-    public bool PanRight() => Move(-MoveStep, 0);
+    public bool PanRight() => Move(-DefaultMoveStep, 0);
 
     public bool ZoomOut()
     {
@@ -57,9 +73,15 @@ public sealed class CameraController
             return false;
         }
 
-        if (camera.GetCurrentZoom() > camera.ZoomMin)
+        int currentZoom = camera.GetCurrentZoom();
+
+        if (currentZoom > GetMaximumZoom())
         {
-            camera.Zoom(-ZoomStep);
+            SetZoomCore(GetMaximumZoom());
+        }
+        else if (currentZoom > camera.ZoomMin)
+        {
+            camera.Zoom(-1);
         }
 
         StatusMessage = "Connected";
@@ -73,13 +95,62 @@ public sealed class CameraController
             return false;
         }
 
-        if (camera.GetCurrentZoom() < DefaultZoomMax)
+        int currentZoom = camera.GetCurrentZoom();
+        int maximumZoom = GetMaximumZoom();
+
+        if (currentZoom > maximumZoom)
         {
-            camera.Zoom(ZoomStep);
+            SetZoomCore(maximumZoom);
+        }
+        else if (currentZoom < maximumZoom)
+        {
+            camera.Zoom(1);
         }
 
         StatusMessage = "Connected";
         return true;
+    }
+
+    public bool SetZoom(int zoom)
+    {
+        if (!EnsureConnected() || camera is null)
+        {
+            return false;
+        }
+
+        return SetZoomCore(zoom);
+    }
+
+    private bool SetZoomCore(int zoom)
+    {
+        if (camera is null)
+        {
+            return false;
+        }
+
+        int targetZoom = Math.Clamp(zoom, camera.ZoomMin, GetMaximumZoom());
+        int currentZoom = camera.GetCurrentZoom();
+        int remainingAttempts = Math.Abs(currentZoom - targetZoom) + 1;
+
+        while (currentZoom != targetZoom && remainingAttempts-- > 0)
+        {
+            int nextZoom = camera.Zoom(Math.Sign(targetZoom - currentZoom));
+
+            if (nextZoom == currentZoom)
+            {
+                break;
+            }
+
+            currentZoom = nextZoom;
+        }
+
+        StatusMessage = "Connected";
+        return currentZoom == targetZoom;
+    }
+
+    private int GetMaximumZoom()
+    {
+        return camera is null ? EffectiveZoomMax : Math.Min(camera.ZoomMax, EffectiveZoomMax);
     }
 
     private bool Move(int pan, int tilt)
